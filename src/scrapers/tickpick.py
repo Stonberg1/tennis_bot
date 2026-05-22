@@ -1,82 +1,81 @@
 """
 TickPick scraper.
 
-WARNING — REVERSE-ENGINEERED ENDPOINTS
-  TickPick does not publish a public API.  The endpoints below
-  (  /api/events  and  /api/listing  ) were inferred by inspecting
-  network traffic on tickpick.com and are NOT officially documented.
-  They may change or be removed without notice.  If requests start
-  returning 4xx/5xx or unexpected JSON shapes, check the TickPick
-  website in a browser with DevTools open and update the URLs and
-  response-parsing logic accordingly.
+Uses known direct event URLs for 2026 US Open sessions at Arthur Ashe Stadium.
+The reverse-engineered /api/events endpoint returned 404 as of May 2026,
+so we now scrape the TickPick listing API using known event IDs extracted
+from the public event pages.
+
+Known event URLs (as of May 2026):
+  Aug 30 Day   (Session 1, 12pm): /buy-.../7396834/
+  Aug 30 Night (Session 2, 7pm):  /buy-.../7396836/
+  Aug 31 Day   (Session 3, 11:30am): /buy-.../7396844/ (redirects to session 3)
+  Aug 31 Night (Session 4, 7pm):  /buy-.../7396844/
 """
 import httpx
+import src.config as config
 
 _BASE = "https://www.tickpick.com"
-_SEARCH_URL = f"{_BASE}/api/events"
 _LISTINGS_URL = f"{_BASE}/api/listing"
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; tennis-monitor/1.0)",
     "Accept": "application/json",
     "Referer": _BASE + "/",
 }
-# Keywords used to identify US Open tennis events in search results
-_US_OPEN_KEYWORDS = ("us open", "usta", "flushing", "arthur ashe")
 
-
-async def _find_event_ids(
-    client: httpx.AsyncClient, target_date: str
-) -> list[tuple[str, str]]:
-    """
-    Search TickPick for US Open tennis events on *target_date*.
-    Returns a list of (event_id, event_url) tuples.
-    """
-    params = {
-        "q": "US Open Tennis",
-        "startDate": target_date,
-        "endDate": target_date,
-    }
-    resp = await client.get(_SEARCH_URL, params=params, headers=_HEADERS)
-    resp.raise_for_status()
-
-    try:
-        body = resp.json()
-    except Exception as exc:
-        raise ValueError(
-            f"[tickpick] event search returned non-JSON (status {resp.status_code}): {exc}"
-        ) from exc
-
-    # TickPick returns either a bare list or a dict with an "events" / "data" key
-    raw = body if isinstance(body, list) else body.get("events", body.get("data", []))
-
-    results: list[tuple[str, str]] = []
-    for event in raw:
-        name: str = (event.get("name") or event.get("title") or "").lower()
-        if any(kw in name for kw in _US_OPEN_KEYWORDS):
-            eid = str(event.get("id") or event.get("eventId") or "")
-            slug = event.get("slug") or event.get("urlSlug") or eid
-            if eid:
-                event_url = f"{_BASE}/tickets/{slug}/" if slug else ""
-                results.append((eid, event_url))
-    return results
+# Hardcoded known event IDs for target sessions
+_TARGET_EVENTS = [
+    {
+        "event_id": "7396834",
+        "session_date": "2026-08-30",
+        "session_type": "day",
+        "label": "Aug 30 Day (Session 1, 12pm)",
+        "event_url": f"{_BASE}/buy-2026-us-open-tennis-championships-session-1-tickets-arthur-ashe-stadium-8-30-26-12pm/7396834/",
+    },
+    {
+        "event_id": "7396836",
+        "session_date": "2026-08-30",
+        "session_type": "night",
+        "label": "Aug 30 Night (Session 2, 7pm)",
+        "event_url": f"{_BASE}/buy-2026-us-open-tennis-championships-session-2-tickets-arthur-ashe-stadium-8-30-26-7pm/7396836/",
+    },
+    {
+        "event_id": "7396843",
+        "session_date": "2026-08-31",
+        "session_type": "day",
+        "label": "Aug 31 Day (Session 3, 11:30am)",
+        "event_url": f"{_BASE}/buy-2026-us-open-tennis-championships-session-3-tickets-arthur-ashe-stadium-8-31-26-1130am/7396843/",
+    },
+    {
+        "event_id": "7396844",
+        "session_date": "2026-08-31",
+        "session_type": "night",
+        "label": "Aug 31 Night (Session 4, 7pm)",
+        "event_url": f"{_BASE}/buy-2026-us-open-tennis-championships-session-4-tickets-arthur-ashe-stadium-8-31-26-7pm/7396844/",
+    },
+]
 
 
 async def scrape_tickpick(*, date: str, session: str) -> list[dict]:
-    """Find US Open events on *date* via the TickPick API and return all listings."""
+    """Fetch listings for all known US Open events on *date* with *session* type."""
     records: list[dict] = []
 
+    # Filter to matching date and session
+    targets = [
+        e for e in _TARGET_EVENTS
+        if e["session_date"] == date and e["session_type"] == session
+    ]
+
+    if not targets:
+        print(f"[tickpick] no known events configured for {date} {session}")
+        return records
+
     async with httpx.AsyncClient(timeout=20) as client:
-        try:
-            event_ids = await _find_event_ids(client, date)
-        except Exception as exc:
-            print(f"[tickpick] event search failed for {date}: {exc}")
-            return records
+        for event in targets:
+            event_id = event["event_id"]
+            event_url = event["event_url"]
+            label = event["label"]
 
-        if not event_ids:
-            print(f"[tickpick] no US Open events found for {date}")
-            return records
-
-        for event_id, event_url in event_ids:
             try:
                 resp = await client.get(
                     _LISTINGS_URL,
@@ -85,17 +84,13 @@ async def scrape_tickpick(*, date: str, session: str) -> list[dict]:
                 )
                 resp.raise_for_status()
             except Exception as exc:
-                print(f"[tickpick] listing fetch failed (event {event_id}): {exc}")
+                print(f"[tickpick] listing fetch failed for {label}: {exc}")
                 continue
 
             try:
                 body = resp.json()
             except Exception as exc:
-                print(
-                    f"[tickpick] listing response for event {event_id} was not valid JSON "
-                    f"(status {resp.status_code}) — the reverse-engineered endpoint may "
-                    f"have changed: {exc}"
-                )
+                print(f"[tickpick] non-JSON response for {label}: {exc}")
                 continue
 
             listings = (
@@ -116,8 +111,7 @@ async def scrape_tickpick(*, date: str, session: str) -> list[dict]:
                 listing_id = listing.get("listingId") or listing.get("id") or ""
                 listing_url = (
                     f"{event_url}?listing={listing_id}"
-                    if listing_id and event_url
-                    else event_url
+                    if listing_id else event_url
                 )
                 records.append({
                     "platform": "tickpick",
@@ -128,7 +122,8 @@ async def scrape_tickpick(*, date: str, session: str) -> list[dict]:
                     "row": str(listing.get("row") or ""),
                     "quantity": int(listing.get("quantity") or 1),
                     "listing_url": listing_url,
+                    "checked_at": __import__("datetime").datetime.utcnow().isoformat(),
                 })
 
-    print(f"[tickpick] {date}: {len(records)} listing(s) returned")
+    print(f"[tickpick] {date} {session}: {len(records)} listing(s) returned")
     return records
