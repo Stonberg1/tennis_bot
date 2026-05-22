@@ -8,5 +8,5 @@ git checkout --theirs src/dashboard/data.js 2>nul
 git checkout --theirs data/price_history.json 2>nul
 git checkout --theirs data/ticketmaster_state.json 2>nul
 git add -f data/price_history.json data/ticketmaster_state.json src/dashboard/data.js src/dashboard/index.html
-git diff --cached --quiet || git commit -m "chore: price check local run" >> logs\monitor.log 2>&1
+git commit --allow-empty -m "chore: price check local run" >> logs\monitor.log 2>&1
 git push origin main --force >> logs\monitor.log 2>&1
