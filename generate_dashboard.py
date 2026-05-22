@@ -76,7 +76,7 @@ def main() -> None:
         f"window.PRICE_META = {json.dumps(meta)};\n",
         encoding="utf-8",
     )
-    print(f"[generate_dashboard] {total} record(s) across {len(grouped)} session(s) → {DATA_JS_PATH}")
+    print(f"[generate_dashboard] {total} record(s) across {len(grouped)} session(s) -> {DATA_JS_PATH}")
 
 
 if __name__ == "__main__":

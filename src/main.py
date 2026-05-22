@@ -4,6 +4,7 @@ import src.config as config
 from src.scrapers.tickpick import scrape_tickpick
 from src.scrapers.seatgeek import scrape_seatgeek
 from src.scrapers.ticketmaster_watcher import scrape_ticketmaster, check_presale
+from src.scrapers.stubhub import scrape_stubhub
 from src import database, notifier
 
 
@@ -31,7 +32,7 @@ async def run():
         except Exception as exc:
             print(f"[check_presale] error for {date}: {exc}")
 
-        for scrape_fn in (scrape_tickpick, scrape_seatgeek, scrape_ticketmaster):
+        for scrape_fn in (scrape_tickpick, scrape_seatgeek, scrape_ticketmaster, scrape_stubhub):
             try:
                 records = await scrape_fn(date=date, session=session)
             except Exception as exc:
