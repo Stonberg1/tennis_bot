@@ -90,4 +90,4 @@ window.PRICE_DATA = {
     }
   }
 };
-window.PRICE_META = {"last_updated": "2026-03-11T16:28:20.096377+00:00", "total_records": 6};
+window.PRICE_META = {"last_updated": "2026-05-22T16:24:35.887271+00:00", "total_records": 6};
