@@ -3,8 +3,6 @@ name: Deploy Dashboard to Pages
 on:
   push:
     branches: [main]
-    paths:
-      - 'src/dashboard/**'
 
 jobs:
   deploy-pages:
