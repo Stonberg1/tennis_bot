@@ -4,3 +4,4 @@ __pycache__/
 data/price_history.json
 src/dashboard/data.js
 data/ticketmaster_state.json
+logs/
